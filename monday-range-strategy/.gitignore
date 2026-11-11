@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Downloaded candles: large, and reproducible with `python -m monday_range download`
+data/
