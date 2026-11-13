@@ -51,7 +51,7 @@ class Setup:
     rr: float  # reward:risk to the full target
     meets_min_rr: bool
     sweep_depth: float  # distance of the extreme beyond the level
-    atr: float
+    closes_outside: int  # longest run of consecutive closes beyond the level this week
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -76,15 +76,6 @@ def _week_keys(index: pd.DatetimeIndex, tz: str) -> tuple[pd.DatetimeIndex, np.n
     weekday = np.asarray(local.day_of_week)
     monday = (local.normalize() - pd.to_timedelta(weekday, unit="D")).tz_convert("UTC")
     return monday, weekday
-
-
-def atr(df: pd.DataFrame, period: int) -> np.ndarray:
-    """Simple-average true range. Used only to size the stop buffer."""
-    high, low, close = (df[c].to_numpy(float) for c in ("high", "low", "close"))
-    prev_close = np.roll(close, 1)
-    prev_close[0] = close[0]
-    tr = np.maximum(high - low, np.maximum(abs(high - prev_close), abs(low - prev_close)))
-    return pd.Series(tr).rolling(period, min_periods=1).mean().to_numpy()
 
 
 def pivot_lows(low: np.ndarray, k: int) -> np.ndarray:
@@ -168,7 +159,7 @@ def _scan_high_sweeps(
     end: int,
     level: float,
     params: StrategyParams,
-) -> list[tuple[int, int, int, str]]:
+) -> list[tuple[int, int, int, str, int]]:
     """Find sweeps of `level` from above in candles [start, end).
 
     A sweep is live only while price is taking fresh liquidity: it starts, and
@@ -176,14 +167,25 @@ def _scan_high_sweeps(
     the week beyond the level. A later poke across the level that does not
     exceed the week's extreme is a retest, not a sweep.
 
-    Returns (first breach index, extreme index, confirmation index, kind), where
+    If `max_consecutive_closes_outside` is set and price closes beyond the level
+    more than that many candles in a row, the level counts as broken and this
+    side is finished for the week.
+
+    Returns (first breach index, extreme index, confirmation index, kind,
+    longest run of consecutive closes beyond the level so far this week), where
     the first breach is the candle that opened the current sweep.
     """
     threshold = level * (1 + params.min_sweep_pct) if level >= 0 else level * (1 - params.min_sweep_pct)
-    found: list[tuple[int, int, int, str]] = []
+    cap = params.max_consecutive_closes_outside
+    found: list[tuple[int, int, int, str, int]] = []
     extreme, e, i0 = -np.inf, -1, -1
     live = False
+    run = longest = 0
     for j in range(start, end):
+        run = run + 1 if c[j] >= level else 0
+        longest = max(longest, run)
+        if cap is not None and longest > cap:
+            break  # accepted beyond the level: a breakout, not a sweep
         if h[j] > threshold and h[j] > extreme:
             if not live or j - e > params.max_bars_to_confirm:
                 i0 = j  # a new sweep begins
@@ -202,7 +204,7 @@ def _scan_high_sweeps(
             if swing is not None and c[j] < swing:
                 kinds.append("MSB")
         if kinds:
-            found.append((i0, e, j, "+".join(kinds)))
+            found.append((i0, e, j, "+".join(kinds), longest))
             live = False
             if len(found) >= params.max_setups_per_side:
                 break
@@ -219,7 +221,6 @@ def find_setups(df: pd.DataFrame, params: StrategyParams = StrategyParams()) -> 
         return []
 
     o, h, l, c = (df[col].to_numpy(float) for col in ("open", "high", "low", "close"))
-    atr_values = atr(df, params.atr_period)
     week, weekday = _week_keys(df.index, params.week_tz)
     bar = pd.Timedelta(minutes=params.timeframe_minutes)
     times = df.index
@@ -243,10 +244,12 @@ def find_setups(df: pd.DataFrame, params: StrategyParams = StrategyParams()) -> 
             sign = 1.0 if side == "short" else -1.0
             level = rng.high if side == "short" else rng.low
             target = rng.low if side == "short" else rng.high
-            for i0, e, j, kind in _scan_high_sweeps(vo, vh, vl, vc, piv, start, end, sign * level, params):
+            for i0, e, j, kind, closes_outside in _scan_high_sweeps(
+                vo, vh, vl, vc, piv, start, end, sign * level, params
+            ):
                 extreme = float(h[e] if side == "short" else l[e])
                 entry = float(c[j])
-                stop = extreme + sign * params.stop_buffer_atr * float(atr_values[j])
+                stop = extreme * (1 + sign * params.stop_buffer_pct)
                 risk = sign * (stop - entry)
                 reward = sign * (entry - target)
                 rr = reward / risk if risk > 0 else float("nan")
@@ -271,7 +274,7 @@ def find_setups(df: pd.DataFrame, params: StrategyParams = StrategyParams()) -> 
                         rr=rr,
                         meets_min_rr=bool(rr >= params.min_rr),
                         sweep_depth=sign * (extreme - level),
-                        atr=float(atr_values[j]),
+                        closes_outside=closes_outside,
                     )
                 )
 

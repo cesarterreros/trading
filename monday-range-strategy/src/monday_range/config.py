@@ -21,6 +21,10 @@ class StrategyParams:
     # the last new weekly high/low beyond the level (32 x 15m = 8h). A poke across
     # the level that makes no new weekly extreme is a retest and never a sweep.
     max_bars_to_confirm: int = 32
+    # Strict-sweep cap. If price closes beyond the level more than this many
+    # candles in a row (8 x 15m = 2h), the level counts as broken and that side
+    # is finished for the week. None disables the cap.
+    max_consecutive_closes_outside: int | None = None
     # Setups allowed per side (Monday High / Monday Low) per week.
     max_setups_per_side: int = 1
 
@@ -36,8 +40,9 @@ class StrategyParams:
     pivot_lookback: int = 96
 
     # --- trade levels ---
-    # Stop is placed beyond the sweep extreme by this multiple of ATR.
-    stop_buffer_atr: float = 0.1
-    atr_period: int = 14
-    # Setups with a lower reward:risk to the full target are flagged, not dropped.
-    min_rr: float = 1.0
+    # Stop is placed beyond the sweep extreme by this fraction of the extreme
+    # (0.05%). A plain percentage, because the strategy uses no indicators.
+    stop_buffer_pct: float = 0.0005
+    # The strategy aims for 1:3 or better. Setups with a lower reward:risk to the
+    # full target are flagged (not dropped) and are not traded.
+    min_rr: float = 3.0
