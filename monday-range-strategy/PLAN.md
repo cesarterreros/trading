@@ -13,10 +13,10 @@ These need an exact definition each, because the public description is ambiguous
 | **CISD** | After the sweep, a candle closes through the open of the first candle in the consecutive run that drove price into the extreme |
 | **MSB** | A candle closes beyond the most recent confirmed swing point (fractal pivot, k bars each side) against the sweep direction |
 | **Entry** | Market at the close of the confirming candle |
-| **Stop** | Beyond the sweep extreme plus a buffer (e.g. 0.1 × ATR) |
+| **Stop** | Beyond the sweep extreme plus a buffer of 0.05% of price (a plain percentage: the strategy uses no indicators) |
 | **Target** | Opposite side of the range, with a partial exit at mid-range |
 | **Sizing** | Fixed % of equity at risk (e.g. 0.5–1%), position size = risk ÷ stop distance |
-| **Limits** | Skip if risk-reward is below a minimum; max one open trade; time stop at week end |
+| **Limits** | Skip if reward:risk is below 3 (he aims for 1:3 or better); one trade per week (the first qualifying setup); time stop at week end |
 
 ## 2. Probabilistic part (recommendation layer)
 
@@ -67,7 +67,10 @@ If the backtest in phase 3 shows no edge after costs, the probability layer cann
 
 ## Status
 
-- **Phases 1–2 are built** (data download and rules engine, with tests). Phases 3–6 are not started.
+- **Phases 1–3 are built** (data download, rules engine, backtester, with tests). Phases 4–6 are not started.
+- **Rules audited against the strategy text.** Three deviations were fixed: the stop buffer no longer uses ATR (no indicators), the minimum reward:risk is 3 instead of 1, and the backtest takes one trade per week instead of every setup.
+- **Phase 3 result: no edge found.** Over Sept 2019 – Nov 2026 the strategy-faithful settings give 114 trades (16 per year), +0.01 R per trade before costs and −0.13 R after costs (95% range −0.39 to +0.14). The strict-sweep cap (8 consecutive closes outside) gives −0.14 R over 95 trades. No variation tested (no partial exit, breakeven stop, reward:risk 2 or 5, wick-only sweeps, New York Monday, maker fees) is positive after costs. By the plan's own rule, the probability layer cannot create an edge that the rules lack, so phase 4 is only worth doing as a filter study with a held-out test period.
+- **Not automated, by design or by omission:** his discretion over which sweeps are "clean", the "be careful when everyone is euphoric" rule, targets at "other clear liquidity levels", and the variants (4H range, specific swing sweeps, breakout and retest).
 - **First chart review done:** 20 setups and 10 empty weeks were checked against charts (verdicts in `output/review_v1/review.csv`). It exposed stale sweeps and a confirmation window that started too early; both were fixed by the new-weekly-extreme rule. The current pack in `output/review/` still has unreviewed rows.
 
 Commands (run from this folder):
@@ -78,6 +81,7 @@ Commands (run from this folder):
 | `uv run python -m monday_range check` | Report gaps and invalid candles |
 | `uv run python -m monday_range scan` | List every setup the rules find, saved to `output/setups.csv` |
 | `uv run python -m monday_range review` | Draw charts of 20 setups and 10 empty weeks into `output/review/` for manual checking |
+| `uv run python -m monday_range backtest` | Backtest on 1-minute candles with costs, with and without the strict-sweep cap, into `output/backtest/` (options: `--cap`, `--min-rr`, `--per-week`, `--partial`, `--breakeven`, `--fee`, `--slippage`) |
 | `uv run pytest` | Run the tests |
 
 ## Decisions

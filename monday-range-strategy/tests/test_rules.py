@@ -79,7 +79,7 @@ def test_short_setup_on_cisd():
     assert s.entry_time == df.index[T + 5]
     assert s.bars_to_confirm == 2
     assert s.entry == 99.7
-    assert s.stop == pytest.approx(106.0 + 0.1 * s.atr)
+    assert s.stop == pytest.approx(106.0 * 1.0005)
     assert s.target == 95.0 and s.partial_target == 100.0
     assert s.rr == pytest.approx((99.7 - 95.0) / (s.stop - 99.7))
     assert s.sweep_depth == pytest.approx(1.0)
@@ -99,7 +99,7 @@ def test_long_setup_on_cisd_and_msb():
     assert s.extreme == 94.0
     assert s.confirm_time == df.index[T + 7]
     assert s.entry == 97.6
-    assert s.stop == pytest.approx(94.0 - 0.1 * s.atr)
+    assert s.stop == pytest.approx(94.0 * 0.9995)
     assert s.target == 105.0
     assert s.rr == pytest.approx((105.0 - 97.6) / (97.6 - s.stop))
 
